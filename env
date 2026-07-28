@@ -1,0 +1,9 @@
+CLIENT_URL=http://localhost:5173
+
+PORT=3000
+
+DB_USER=redflintdb
+
+DB_PASS=redflintdb123456789
+
+JWT_SECRET=redflint_super_secret_key_2026
