@@ -36,32 +36,29 @@ Built with:
 
 ```bash
 server
-├── src
-│   ├── config
-│   │   ├── database.js
-│   │   └── mongodb.js
-│   │
-│   ├── controllers
-│   │   ├── authController.js
-│   │   └── userController.js
-│   │
-│   ├── middleware
-│   │   └── verifyJWT.js
-│   │
-│   ├── routes
-│   │   ├── authRoutes.js
-│   │   └── userRoutes.js
-│   │
-│   ├── utils
-│   │   └── generateToken.js
-│   │
-│   └── server.js
-│
-├── .env
-├── package.json
-└── README.md
-```
+├─ env
+├─ package-lock.json
+├─ package.json
+├─ README.md
+└─ src
+   ├─ config
+   │  ├─ database.js
+   │  └─ mongodb.js
+   ├─ controllers
+   │  ├─ authController.js
+   │  ├─ productController.js
+   │  └─ userController.js
+   ├─ middleware
+   │  └─ verifyJWT.js
+   ├─ routes
+   │  ├─ authRoutes.js
+   │  ├─ productRoutes.js
+   │  └─ userRoutes.js
+   ├─ server.js
+   └─ utils
+      └─ generateToken.js
 
+```
 ---
 
 # ⚙️ Installation
@@ -397,3 +394,4 @@ Development
 This project is developed for the **CSE412 Software Engineering Course Project** at **East West University**.
 
 Developed by the RedFlint Team.
+
