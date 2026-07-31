@@ -45,12 +45,14 @@ server
    │  └─ mongodb.js
    ├─ controllers
    │  ├─ authController.js
+   │  ├─ cartController.js
    │  ├─ productController.js
    │  └─ userController.js
    ├─ middleware
    │  └─ verifyJWT.js
    ├─ routes
    │  ├─ authRoutes.js
+   │  ├─ cartRoutes.js
    │  ├─ productRoutes.js
    │  └─ userRoutes.js
    ├─ server.js
@@ -393,4 +395,5 @@ Development
 This project is developed for the **CSE412 Software Engineering Course Project** at **East West University**.
 
 Developed by the RedFlint Team.
+
 
