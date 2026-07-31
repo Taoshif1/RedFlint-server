@@ -36,7 +36,6 @@ Built with:
 
 ```bash
 server
-├─ env
 ├─ package-lock.json
 ├─ package.json
 ├─ README.md
