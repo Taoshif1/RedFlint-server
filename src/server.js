@@ -12,6 +12,7 @@ import userRoutes from "./routes/userRoutes.js";
 // import verifyJWT from "./middleware/verifyJWT.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
 
 dotenv.config();
 
@@ -58,6 +59,8 @@ app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 
 app.use("/api/wishlist", wishlistRoutes);
+
+app.use("/api/orders", orderRoutes);
 
 app.get("/", (req, res) => {
   res.send("🔥 RedFlint Server Running...");

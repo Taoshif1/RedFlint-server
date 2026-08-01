@@ -4,7 +4,9 @@ import { ObjectId } from "mongodb";
 // Add to Cart
 export const addToCart = async (req, res) => {
   try {
-    const { productId, title, image, price, size, quantity } = req.body;
+    console.log("Request Body:", req.body); // Log the request body for debugging
+    const { productId, title, image, price, offerPrice, size, quantity } =
+      req.body;
 
     const userEmail = req.decoded.email;
 
@@ -38,6 +40,7 @@ export const addToCart = async (req, res) => {
       title,
       image,
       price,
+      offerPrice,
       size,
       quantity,
       createdAt: new Date(),
