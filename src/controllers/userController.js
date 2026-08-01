@@ -16,8 +16,16 @@ export const createUser = async (req, res) => {
       });
     }
 
+    user.phone = user.phone || "Not Provided";
+
     user.role = user.role || "customer";
+
+    user.isBlocked = false;
+
     user.createdAt = new Date();
+
+    user.updatedAt = new Date();
+
     user.lastLogin = new Date();
 
     const result = await usersCollection.insertOne(user);
@@ -63,7 +71,13 @@ export const updateUser = async (req, res) => {
   try {
     const { email } = req.params;
 
-    const updatedData = req.body;
+    const { name, phone, photoURL } = req.body;
+
+    const updatedData = {
+      ...(name && { name }),
+      ...(phone && { phone }),
+      ...(photoURL && { photoURL }),
+    };
 
     if (req.decoded.email !== email) {
       return res.status(403).send({
@@ -75,7 +89,10 @@ export const updateUser = async (req, res) => {
     const result = await usersCollection.updateOne(
       { email },
       {
-        $set: updatedData,
+        $set: {
+          ...updatedData,
+          updatedAt: new Date(),
+        },
       },
     );
 
