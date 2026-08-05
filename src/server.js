@@ -5,10 +5,16 @@ import cookieParser from "cookie-parser";
 
 import client from "./config/mongodb.js";
 import { usersCollection } from "./config/database.js";
+
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 // import verifyJWT from "./middleware/verifyJWT.js";
+import cartRoutes from "./routes/cartRoutes.js";
+import wishlistRoutes from "./routes/wishlistRoutes.js";
+import orderRoutes from "./routes/orderRoutes.js";
+import addressRoutes from "./routes/addressRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 
 dotenv.config();
 
@@ -51,6 +57,16 @@ app.use("/api/users", userRoutes);
 app.use("/api/auth", authRoutes);
 
 app.use("/api/products", productRoutes);
+
+app.use("/api/cart", cartRoutes);
+
+app.use("/api/wishlist", wishlistRoutes);
+
+app.use("/api/orders", orderRoutes);
+
+app.use("/api/addresses", addressRoutes);
+
+app.use("/api/admin", adminRoutes);
 
 app.get("/", (req, res) => {
   res.send("🔥 RedFlint Server Running...");
