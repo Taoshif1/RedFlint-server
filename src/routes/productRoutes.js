@@ -6,11 +6,14 @@ import {
   createProduct,
   updateProduct,
   deleteProduct,
+  getSpecialEditionProducts,
 } from "../controllers/productController.js";
 
 const router = Router();
 
 router.get("/", getProducts);
+
+router.get("/special-edition", getSpecialEditionProducts);
 
 router.get("/:id", getProductById);
 

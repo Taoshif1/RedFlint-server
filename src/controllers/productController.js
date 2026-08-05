@@ -89,3 +89,18 @@ export const deleteProduct = async (req, res) => {
     });
   }
 };
+
+export const getSpecialEditionProducts = async (req, res) => {
+  try {
+    const products = await productsCollection
+      .find({ isSpecial: true })
+      .toArray();
+
+    res.send(products);
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+};
