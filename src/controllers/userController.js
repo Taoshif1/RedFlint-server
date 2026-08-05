@@ -28,6 +28,8 @@ export const createUser = async (req, res) => {
 
     user.lastLogin = new Date();
 
+    user.addresses = [];
+
     const result = await usersCollection.insertOne(user);
 
     res.status(201).send({
@@ -56,7 +58,7 @@ export const getUserByEmail = async (req, res) => {
         message: "Forbidden",
       });
     }
-
+    console.log(user);
     res.send(user);
   } catch (error) {
     res.status(500).send({

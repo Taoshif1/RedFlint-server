@@ -1,7 +1,7 @@
 import { ordersCollection, cartsCollection } from "../config/database.js";
+import { ObjectId } from "mongodb";
 
 // Create Order
-
 export const createOrder = async (req, res) => {
   try {
     const userEmail = req.decoded.email;
@@ -64,72 +64,127 @@ export const getMyOrders = async (req, res) => {
 
 // Get All Orders (Admin)
 
-export const getAllOrders = async (req, res) => {
-  try {
-    const orders = await ordersCollection
-      .find()
-      .sort({ createdAt: -1 })
-      .toArray();
+// export const getAllOrders = async (req, res) => {
+//   try {
+//     const orders = await ordersCollection
+//       .find()
+//       .sort({ createdAt: -1 })
+//       .toArray();
 
-    res.send(orders);
-  } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+//     res.send(orders);
+//   } catch (error) {
+//     res.status(500).send({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 // Payment Verification
 
-import { ObjectId } from "mongodb";
+// import { ObjectId } from "mongodb";
 
-export const verifyPayment = async (req, res) => {
+// export const verifyPayment = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const { status } = req.body;
+
+//     const result = await ordersCollection.updateOne(
+//       {
+//         _id: new ObjectId(id),
+//       },
+//       {
+//         $set: {
+//           "payment.status": status,
+//         },
+//       },
+//     );
+
+//     res.send(result);
+//   } catch (error) {
+//     res.status(500).send({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+// Order Status Update
+
+// export const updateOrderStatus = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+
+//     const { status } = req.body;
+
+//     const result = await ordersCollection.updateOne(
+//       {
+//         _id: new ObjectId(id),
+//       },
+//       {
+//         $set: {
+//           orderStatus: status,
+//         },
+//       },
+//     );
+
+//     res.send(result);
+//   } catch (error) {
+//     res.status(500).send({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+// get single order by id
+
+export const getSingleOrder = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { status } = req.body;
+    const userEmail = req.decoded.email;
 
-    const result = await ordersCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
-      {
-        $set: {
-          "payment.status": status,
-        },
-      },
-    );
+    const order = await ordersCollection.findOne({
+      _id: new ObjectId(id),
+      userEmail,
+    });
 
-    res.send(result);
+    if (!order) {
+      return res.status(404).send({
+        message: "Order not found",
+      });
+    }
+
+    res.send(order);
   } catch (error) {
     res.status(500).send({
-      success: false,
       message: error.message,
     });
   }
 };
 
-// Order Status Update
+// import { ObjectId } from "mongodb";
 
-export const updateOrderStatus = async (req, res) => {
+export const getMyOrderById = async (req, res) => {
   try {
     const { id } = req.params;
+    const userEmail = req.decoded.email;
 
-    const { status } = req.body;
+    const order = await ordersCollection.findOne({
+      _id: new ObjectId(id),
+      userEmail,
+    });
 
-    const result = await ordersCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
-      {
-        $set: {
-          orderStatus: status,
-        },
-      },
-    );
+    if (!order) {
+      return res.status(404).send({
+        success: false,
+        message: "Order not found",
+      });
+    }
 
-    res.send(result);
+    res.send(order);
   } catch (error) {
     res.status(500).send({
       success: false,

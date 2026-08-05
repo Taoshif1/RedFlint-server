@@ -397,3 +397,36 @@ This project is developed for the **CSE412 Software Engineering Course Project**
 Developed by the RedFlint Team.
 
 
+
+```
+server
+├─ package-lock.json
+├─ package.json
+├─ README.md
+└─ src
+   ├─ config
+   │  ├─ database.js
+   │  └─ mongodb.js
+   ├─ controllers
+   │  ├─ addressController.js
+   │  ├─ authController.js
+   │  ├─ cartController.js
+   │  ├─ paymentController.js
+   │  ├─ productController.js
+   │  ├─ userController.js
+   │  └─ wishlistController.js
+   ├─ middleware
+   │  └─ verifyJWT.js
+   ├─ routes
+   │  ├─ addressRoutes.js
+   │  ├─ authRoutes.js
+   │  ├─ cartRoutes.js
+   │  ├─ paymentRoutes.js
+   │  ├─ productRoutes.js
+   │  ├─ userRoutes.js
+   │  └─ wishlistRoutes.js
+   ├─ server.js
+   └─ utils
+      └─ generateToken.js
+
+```
