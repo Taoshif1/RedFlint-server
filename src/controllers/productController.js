@@ -3,7 +3,36 @@ import { productsCollection } from "../config/database.js";
 
 export const getProducts = async (req, res) => {
   try {
-    const products = await productsCollection.find().toArray();
+    const { search } = req.query;
+
+    let query = {};
+
+    if (search) {
+      query = {
+        $or: [
+          {
+            title: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            description: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+          {
+            category: {
+              $regex: search,
+              $options: "i",
+            },
+          },
+        ],
+      };
+    }
+
+    const products = await productsCollection.find(query).toArray();
 
     res.send(products);
   } catch (error) {
