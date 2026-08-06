@@ -3,28 +3,41 @@ import { productsCollection } from "../config/database.js";
 
 export const getProducts = async (req, res) => {
   try {
-    const { search } = req.query;
+    const search = req.query.search?.trim() || "";
+    const sort = req.query.sort || "newest";
+
+    // Prevent special characters from changing the regex search
+    const safeSearch = search.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&",
+    );
 
     let query = {};
 
-    if (search) {
+    if (safeSearch) {
       query = {
         $or: [
           {
             title: {
-              $regex: search,
+              $regex: safeSearch,
               $options: "i",
             },
           },
           {
             description: {
-              $regex: search,
+              $regex: safeSearch,
               $options: "i",
             },
           },
           {
             category: {
-              $regex: search,
+              $regex: safeSearch,
+              $options: "i",
+            },
+          },
+          {
+            season: {
+              $regex: safeSearch,
               $options: "i",
             },
           },
@@ -32,10 +45,50 @@ export const getProducts = async (req, res) => {
       };
     }
 
-    const products = await productsCollection.find(query).toArray();
+    const sortOptions = {
+      "name-asc": {
+        title: 1,
+        _id: 1,
+      },
 
-    res.send(products);
+      "name-desc": {
+        title: -1,
+        _id: -1,
+      },
+
+      "price-asc": {
+        offerPrice: 1,
+        _id: 1,
+      },
+
+      "price-desc": {
+        offerPrice: -1,
+        _id: -1,
+      },
+
+      oldest: {
+        createdAt: 1,
+        _id: 1,
+      },
+
+      newest: {
+        createdAt: -1,
+        _id: -1,
+      },
+    };
+
+    const selectedSort =
+      sortOptions[sort] || sortOptions.newest;
+
+    const products = await productsCollection
+      .find(query)
+      .sort(selectedSort)
+      .toArray();
+
+    res.status(200).send(products);
   } catch (error) {
+    console.error("Get products error:", error);
+
     res.status(500).send({
       success: false,
       message: error.message,
