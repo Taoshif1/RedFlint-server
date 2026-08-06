@@ -15,6 +15,7 @@ import wishlistRoutes from "./routes/wishlistRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import addressRoutes from "./routes/addressRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
 
 dotenv.config();
 
@@ -67,6 +68,8 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/addresses", addressRoutes);
 
 app.use("/api/admin", adminRoutes);
+
+app.use("/api/settings", settingsRoutes);
 
 app.get("/", (req, res) => {
   res.send("🔥 RedFlint Server Running...");

@@ -7,6 +7,9 @@ import {
   getAllOrders,
   verifyPayment,
   updateOrderStatus,
+  getAllUsers,
+  updateUserRole,
+  toggleUserBlock,
 } from "../controllers/adminController.js";
 
 const router = Router();
@@ -14,6 +17,12 @@ const router = Router();
 router.use(verifyJWT, verifyAdmin);
 
 router.get("/orders", getAllOrders);
+
+router.get("/users", getAllUsers);
+
+router.patch("/users/:id/role", updateUserRole);
+
+router.patch("/users/:id/block", toggleUserBlock);
 
 router.patch("/orders/:id/payment", verifyPayment);
 

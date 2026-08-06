@@ -1,5 +1,5 @@
 import { ObjectId } from "mongodb";
-import { ordersCollection } from "../config/database.js";
+import { ordersCollection, usersCollection } from "../config/database.js";
 
 // Get All Orders
 
@@ -59,11 +59,16 @@ export const updateOrderStatus = async (req, res) => {
       {
         $set: {
           orderStatus: status,
+          updatedAt: new Date(),
         },
       },
     );
 
-    res.send(result);
+    res.send({
+      success: true,
+      message: "Order updated successfully.",
+      result,
+    });
   } catch (error) {
     res.status(500).send({
       success: false,
@@ -71,34 +76,6 @@ export const updateOrderStatus = async (req, res) => {
     });
   }
 };
-
-// Update Payment Status
-
-export const updatePaymentStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const result = await ordersCollection.updateOne(
-      {
-        _id: new ObjectId(id),
-      },
-      {
-        $set: {
-          "payment.status": status,
-        },
-      },
-    );
-
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
 
 // Update Payment Status
 
@@ -114,11 +91,143 @@ export const verifyPayment = async (req, res) => {
       {
         $set: {
           "payment.status": status,
+          updatedAt: new Date(),
         },
-      }
+      },
     );
 
-    res.send(result);
+    res.send({
+      success: true,
+      message: "Payment updated successfully.",
+      result,
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Get All Users
+
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await usersCollection
+      .find()
+      .sort({ createdAt: -1 })
+      .toArray();
+
+    res.send(users);
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Update User Role
+
+export const updateUserRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role } = req.body;
+
+    const targetUser = await usersCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!targetUser) {
+      return res.status(404).send({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    if (!["admin", "customer"].includes(role)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid role.",
+      });
+    }
+
+    if (req.decoded.email === targetUser.email && role === "customer") {
+      return res.status(400).send({
+        success: false,
+        message: "You cannot remove your own admin role.",
+      });
+    }
+
+    const result = await usersCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          role,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    res.send({
+      success: true,
+      message: "Role updated successfully.",
+      result,
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Block / Unblock User
+
+export const toggleUserBlock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isBlocked } = req.body;
+
+    const targetUser = await usersCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!targetUser) {
+      return res.status(404).send({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    if (req.decoded.email === targetUser.email && isBlocked) {
+      return res.status(400).send({
+        success: false,
+        message: "You cannot block your own account.",
+      });
+    }
+
+    const result = await usersCollection.updateOne(
+      {
+        _id: new ObjectId(id),
+      },
+      {
+        $set: {
+          isBlocked,
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    res.send({
+      success: true,
+      message: isBlocked
+        ? "User blocked successfully."
+        : "User unblocked successfully.",
+      result,
+    });
   } catch (error) {
     res.status(500).send({
       success: false,
