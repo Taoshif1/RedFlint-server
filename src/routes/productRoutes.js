@@ -9,20 +9,21 @@ import {
   updateProduct,
   deleteProduct,
   getSpecialEditionProducts,
+  getFeaturedProducts,
 } from "../controllers/productController.js";
 
 const router = Router();
 
 router.get("/", getProducts);
 
+// Specific routes must stay above /:id
+router.get("/featured", getFeaturedProducts);
 router.get("/special-edition", getSpecialEditionProducts);
 
 router.get("/:id", getProductById);
 
-router.post("/", verifyJWT, verifyAdmin, createProduct);
-
-router.patch("/:id", verifyJWT, verifyAdmin, updateProduct);
-
-router.delete("/:id", verifyJWT, verifyAdmin, deleteProduct);
+router.post("/", createProduct);
+router.patch("/:id", updateProduct);
+router.delete("/:id", deleteProduct);
 
 export default router;

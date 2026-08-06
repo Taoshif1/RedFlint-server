@@ -133,3 +133,20 @@ export const getSpecialEditionProducts = async (req, res) => {
     });
   }
 };
+
+export const getFeaturedProducts = async (req, res) => {
+  try {
+    const products = await productsCollection
+      .find({ isFeatured: true })
+      .toArray();
+
+    res.send(products);
+  } catch (error) {
+    console.error("Featured products error:", error);
+
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+};
