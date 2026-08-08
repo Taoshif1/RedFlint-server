@@ -1,5 +1,8 @@
 import { Router } from "express";
 
+import verifyJWT from "../middleware/verifyJWT.js";
+import verifyAdmin from "../middleware/verifyAdmin.js";
+
 import {
   getSettings,
   updateSettings,
@@ -9,6 +12,6 @@ const router = Router();
 
 router.get("/", getSettings);
 
-router.patch("/", updateSettings);
+router.patch("/", verifyJWT, verifyAdmin, updateSettings);
 
 export default router;

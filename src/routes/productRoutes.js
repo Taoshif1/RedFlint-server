@@ -22,8 +22,8 @@ router.get("/special-edition", getSpecialEditionProducts);
 
 router.get("/:id", getProductById);
 
-router.post("/", createProduct);
-router.patch("/:id", updateProduct);
-router.delete("/:id", deleteProduct);
+router.post("/", verifyJWT, verifyAdmin, createProduct);
+router.patch("/:id", verifyJWT, verifyAdmin, updateProduct);
+router.delete("/:id", verifyJWT, verifyAdmin, deleteProduct);
 
 export default router;

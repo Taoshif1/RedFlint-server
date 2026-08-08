@@ -34,6 +34,7 @@ Built with:
 
 # 📁 Project Structure
 
+
 ```bash
 server
 ├─ package-lock.json
@@ -44,17 +45,28 @@ server
    │  ├─ database.js
    │  └─ mongodb.js
    ├─ controllers
+   │  ├─ addressController.js
+   │  ├─ adminController.js
    │  ├─ authController.js
    │  ├─ cartController.js
+   │  ├─ orderController.js
    │  ├─ productController.js
-   │  └─ userController.js
+   │  ├─ settingsController.js
+   │  ├─ userController.js
+   │  └─ wishlistController.js
    ├─ middleware
+   │  ├─ verifyAdmin.js
    │  └─ verifyJWT.js
    ├─ routes
+   │  ├─ addressRoutes.js
+   │  ├─ adminRoutes.js
    │  ├─ authRoutes.js
    │  ├─ cartRoutes.js
+   │  ├─ orderRoutes.js
    │  ├─ productRoutes.js
-   │  └─ userRoutes.js
+   │  ├─ settingsRoutes.js
+   │  ├─ userRoutes.js
+   │  └─ wishlistRoutes.js
    ├─ server.js
    └─ utils
       └─ generateToken.js
@@ -395,38 +407,3 @@ Development
 This project is developed for the **CSE412 Software Engineering Course Project** at **East West University**.
 
 Developed by the RedFlint Team.
-
-
-
-```
-server
-├─ package-lock.json
-├─ package.json
-├─ README.md
-└─ src
-   ├─ config
-   │  ├─ database.js
-   │  └─ mongodb.js
-   ├─ controllers
-   │  ├─ addressController.js
-   │  ├─ authController.js
-   │  ├─ cartController.js
-   │  ├─ paymentController.js
-   │  ├─ productController.js
-   │  ├─ userController.js
-   │  └─ wishlistController.js
-   ├─ middleware
-   │  └─ verifyJWT.js
-   ├─ routes
-   │  ├─ addressRoutes.js
-   │  ├─ authRoutes.js
-   │  ├─ cartRoutes.js
-   │  ├─ paymentRoutes.js
-   │  ├─ productRoutes.js
-   │  ├─ userRoutes.js
-   │  └─ wishlistRoutes.js
-   ├─ server.js
-   └─ utils
-      └─ generateToken.js
-
-```

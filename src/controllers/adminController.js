@@ -235,3 +235,49 @@ export const toggleUserBlock = async (req, res) => {
     });
   }
 };
+
+export const updateAdminProfile = async (req, res) => {
+  try {
+    const { name, photoURL } = req.body;
+
+    if (!name?.trim()) {
+      return res.status(400).send({
+        success: false,
+        message: "Name is required.",
+      });
+    }
+
+    const result = await usersCollection.updateOne(
+      {
+        email: req.decoded.email,
+        role: "admin",
+      },
+      {
+        $set: {
+          name: name.trim(),
+          photoURL: photoURL || "",
+          updatedAt: new Date(),
+        },
+      },
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "Admin account not found.",
+      });
+    }
+
+    res.send({
+      success: true,
+      message: "Profile updated successfully.",
+    });
+  } catch (error) {
+    console.error("Update admin profile error:", error);
+
+    res.status(500).send({
+      success: false,
+      message: error.message,
+    });
+  }
+};

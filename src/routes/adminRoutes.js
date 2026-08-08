@@ -10,6 +10,7 @@ import {
   getAllUsers,
   updateUserRole,
   toggleUserBlock,
+  updateAdminProfile,
 } from "../controllers/adminController.js";
 
 const router = Router();
@@ -19,6 +20,8 @@ router.use(verifyJWT, verifyAdmin);
 router.get("/orders", getAllOrders);
 
 router.get("/users", getAllUsers);
+
+router.patch("/profile", updateAdminProfile);
 
 router.patch("/users/:id/role", updateUserRole);
 
