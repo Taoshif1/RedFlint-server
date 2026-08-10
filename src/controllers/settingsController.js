@@ -14,6 +14,7 @@ export const getSettings = async (req, res) => {
         storeName: "RedFlint",
         supportEmail: "support@redflint.com",
         supportPhone: "",
+        whatsappNumber: "",
         currency: "BDT",
         shippingFee: 120,
         freeShipping: 3000,

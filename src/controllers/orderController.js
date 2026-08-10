@@ -282,7 +282,7 @@ export const createOrder = async (req, res) => {
 
       customerName: customerName.trim(),
 
-      phone: phone.trim(),
+      phone: normalizePhone(phone),
 
       email: userEmail,
 
@@ -404,7 +404,7 @@ export const createGuestOrder = async (req, res) => {
       orderSource: orderSource === "buy_now" ? "buy_now" : "cart",
       customerName: customerName.trim(),
 
-      phone: phone.trim(),
+      phone: normalizePhone(phone),
 
       email: email?.trim() || "",
 

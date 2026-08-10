@@ -52,6 +52,28 @@ export const updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
+    const allowedStatuses = [
+      "Pending",
+      "Processing",
+      "Shipped",
+      "Delivered",
+      "Cancelled",
+    ];
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid order ID.",
+      });
+    }
+
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid order status.",
+      });
+    }
+
     const result = await ordersCollection.updateOne(
       {
         _id: new ObjectId(id),
@@ -64,9 +86,16 @@ export const updateOrderStatus = async (req, res) => {
       },
     );
 
+    if (result.matchedCount === 0) {
+      return res.status(404).send({
+        success: false,
+        message: "Order not found.",
+      });
+    }
+
     res.send({
       success: true,
-      message: "Order updated successfully.",
+      message: "Order status updated successfully.",
       result,
     });
   } catch (error) {
