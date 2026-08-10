@@ -1,25 +1,35 @@
 import { Router } from "express";
+
 import verifyJWT from "../middleware/verifyJWT.js";
 
 import {
   createOrder,
+  createGuestOrder,
   getMyOrders,
-  getSingleOrder,
   getMyOrderById,
 } from "../controllers/orderController.js";
 
 const router = Router();
 
+// ======================================
+// Guest Checkout
+// ======================================
+
+// No JWT required
+router.post("/guest", createGuestOrder);
+
+// ======================================
+// Registered Customer Checkout
+// ======================================
+
 router.post("/", verifyJWT, createOrder);
+
+// ======================================
+// Registered Customer Orders
+// ======================================
 
 router.get("/", verifyJWT, getMyOrders);
 
-// router.get("/admin", verifyJWT, getAllOrders);
-
 router.get("/:id", verifyJWT, getMyOrderById);
-
-// router.patch("/:id/payment", verifyJWT, verifyPayment);
-
-// router.patch("/:id/status", verifyJWT, updateOrderStatus);
 
 export default router;
