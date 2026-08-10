@@ -1,4 +1,5 @@
 import { ObjectId } from "mongodb";
+import { randomBytes } from "crypto";
 
 import {
   ordersCollection,
@@ -168,6 +169,37 @@ const validatePaymentMethod = (paymentMethod) => {
 };
 
 // ======================================
+// Helper: Normalize phone
+// ======================================
+
+const normalizePhone = (phone = "") => {
+  return phone.replace(/[\s-]/g, "").trim();
+};
+
+// ======================================
+// Helper: Generate customer order number
+// ======================================
+
+const generateOrderNumber = async () => {
+  let orderNumber;
+  let exists = true;
+
+  while (exists) {
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+    const randomPart = randomBytes(3).toString("hex").toUpperCase();
+
+    orderNumber = `RF-${datePart}-${randomPart}`;
+
+    exists = await ordersCollection.findOne({
+      orderNumber,
+    });
+  }
+
+  return orderNumber;
+};
+
+// ======================================
 // CREATE ORDER - REGISTERED USER
 // ======================================
 
@@ -239,8 +271,14 @@ export const createOrder = async (req, res) => {
 
     const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
 
+    const orderNumber = await generateOrderNumber();
+
     const order = {
+      orderNumber,
+
       customerType: "registered",
+
+      orderSource: isBuyNow ? "buy_now" : "cart",
 
       customerName: customerName.trim(),
 
@@ -290,6 +328,7 @@ export const createOrder = async (req, res) => {
     res.status(201).send({
       success: true,
       insertedId: result.insertedId,
+      orderNumber,
       message: "Order placed successfully.",
     });
   } catch (error) {
@@ -317,6 +356,7 @@ export const createGuestOrder = async (req, res) => {
       postalCode = "",
       transactionId,
       paymentMethod = "bkash",
+      orderSource = "cart",
       products: requestedProducts,
     } = req.body;
 
@@ -356,9 +396,12 @@ export const createGuestOrder = async (req, res) => {
 
     const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
 
-    const order = {
-      customerType: "guest",
+    const orderNumber = await generateOrderNumber();
 
+    const order = {
+      orderNumber,
+      customerType: "guest",
+      orderSource: orderSource === "buy_now" ? "buy_now" : "cart",
       customerName: customerName.trim(),
 
       phone: phone.trim(),
@@ -399,6 +442,7 @@ export const createGuestOrder = async (req, res) => {
     res.status(201).send({
       success: true,
       insertedId: result.insertedId,
+      orderNumber,
       message: "Guest order placed successfully.",
     });
   } catch (error) {
@@ -407,6 +451,123 @@ export const createGuestOrder = async (req, res) => {
     res.status(400).send({
       success: false,
       message: error.message || "Failed to place guest order.",
+    });
+  }
+};
+
+// ======================================
+// TRACK ORDER - PUBLIC
+// ======================================
+
+export const trackOrder = async (req, res) => {
+  try {
+    const { orderNumber, phone } = req.body;
+
+    if (!orderNumber?.trim()) {
+      return res.status(400).send({
+        success: false,
+        message: "Order number is required.",
+      });
+    }
+
+    if (!phone?.trim()) {
+      return res.status(400).send({
+        success: false,
+        message: "Phone number is required.",
+      });
+    }
+
+    const cleanOrderNumber = orderNumber.trim();
+
+    const cleanPhone = normalizePhone(phone);
+
+    // ======================================
+    // Support new RF order numbers
+    // and old MongoDB order IDs
+    // ======================================
+
+    let query = {
+      phone: cleanPhone,
+    };
+
+    if (
+      ObjectId.isValid(cleanOrderNumber) &&
+      !cleanOrderNumber.toUpperCase().startsWith("RF-")
+    ) {
+      query._id = new ObjectId(cleanOrderNumber);
+    } else {
+      query.orderNumber = cleanOrderNumber.toUpperCase();
+    }
+
+    const order = await ordersCollection.findOne(query);
+
+    if (!order) {
+      return res.status(404).send({
+        success: false,
+        message: "Order not found. Check your order number and phone number.",
+      });
+    }
+
+    // ======================================
+    // Return only safe tracking information
+    // ======================================
+
+    const safeProducts =
+      order.products?.map((item) => ({
+        productId: item.productId,
+
+        title: item.title,
+
+        image: item.image,
+
+        size: item.size,
+
+        quantity: item.quantity,
+
+        unitPrice: item.unitPrice,
+
+        lineTotal: item.lineTotal,
+      })) || [];
+
+    res.send({
+      success: true,
+
+      order: {
+        orderNumber: order.orderNumber || order._id.toString(),
+
+        customerName: order.customerName,
+
+        customerType: order.customerType || "registered",
+
+        orderSource: order.orderSource || "cart",
+
+        products: safeProducts,
+
+        subtotal: order.subtotal,
+
+        shipping: order.shipping,
+
+        total: order.total,
+
+        payment: {
+          method: order.payment?.method,
+
+          status: order.payment?.status,
+        },
+
+        orderStatus: order.orderStatus,
+
+        createdAt: order.createdAt,
+
+        updatedAt: order.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error("Track order error:", error);
+
+    res.status(500).send({
+      success: false,
+      message: "Failed to track order.",
     });
   }
 };

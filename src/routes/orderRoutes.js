@@ -5,6 +5,7 @@ import verifyJWT from "../middleware/verifyJWT.js";
 import {
   createOrder,
   createGuestOrder,
+  trackOrder,
   getMyOrders,
   getMyOrderById,
 } from "../controllers/orderController.js";
@@ -17,6 +18,9 @@ const router = Router();
 
 // No JWT required
 router.post("/guest", createGuestOrder);
+
+// Public order tracking
+router.post("/track", trackOrder);
 
 // ======================================
 // Registered Customer Checkout
