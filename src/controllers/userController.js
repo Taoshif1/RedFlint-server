@@ -3,32 +3,33 @@ import { usersCollection } from "../config/database.js";
 // Create User
 export const createUser = async (req, res) => {
   try {
-    const user = req.body;
+    const { name = "", phone = "", photoURL = "" } = req.body;
+    const email = req.decoded.email;
+    const uid = req.decoded.uid;
 
-    const existingUser = await usersCollection.findOne({
-      email: user.email,
-    });
+    const existingUser = await usersCollection.findOne({ email });
 
     if (existingUser) {
       return res.status(200).send({
         success: true,
         message: "User already exists.",
+        user: existingUser,
       });
     }
 
-    user.phone = user.phone || "Not Provided";
-
-    user.role = user.role || "customer";
-
-    user.isBlocked = false;
-
-    user.createdAt = new Date();
-
-    user.updatedAt = new Date();
-
-    user.lastLogin = new Date();
-
-    user.addresses = [];
+    const user = {
+      uid,
+      email,
+      name: name.trim() || email.split("@")[0],
+      phone: phone.trim() || "Not Provided",
+      photoURL: photoURL || "",
+      role: "customer",
+      isBlocked: false,
+      addresses: [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      lastLogin: new Date(),
+    };
 
     const result = await usersCollection.insertOne(user);
 
@@ -50,15 +51,15 @@ export const getUserByEmail = async (req, res) => {
   try {
     const { email } = req.params;
 
-    const user = await usersCollection.findOne({ email });
-
     if (req.decoded.email !== email) {
       return res.status(403).send({
         success: false,
         message: "Forbidden",
       });
     }
-    console.log(user);
+
+    const user = await usersCollection.findOne({ email });
+
     res.send(user);
   } catch (error) {
     res.status(500).send({
@@ -72,14 +73,7 @@ export const getUserByEmail = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { email } = req.params;
-
     const { name, phone, photoURL } = req.body;
-
-    const updatedData = {
-      ...(name && { name }),
-      ...(phone && { phone }),
-      ...(photoURL && { photoURL }),
-    };
 
     if (req.decoded.email !== email) {
       return res.status(403).send({
@@ -88,13 +82,17 @@ export const updateUser = async (req, res) => {
       });
     }
 
+    const updatedData = {
+      ...(name?.trim() && { name: name.trim() }),
+      ...(phone?.trim() && { phone: phone.trim() }),
+      ...(typeof photoURL === "string" && { photoURL }),
+      updatedAt: new Date(),
+    };
+
     const result = await usersCollection.updateOne(
       { email },
       {
-        $set: {
-          ...updatedData,
-          updatedAt: new Date(),
-        },
+        $set: updatedData,
       },
     );
 
@@ -124,6 +122,7 @@ export const updateLastLogin = async (req, res) => {
       {
         $set: {
           lastLogin: new Date(),
+          updatedAt: new Date(),
         },
       },
     );
