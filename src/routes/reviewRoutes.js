@@ -14,27 +14,14 @@ import {
 
 const router = Router();
 
-// ======================================
-// Public
-// ======================================
-
+// Public review endpoints
 router.get("/featured", getFeaturedReviews);
-
 router.get("/product/:productId", getProductReviews);
-
-// Verified purchase,
-// but login is not required because
-// guest customers must also be able to review.
 router.post("/", createReview);
 
-// ======================================
-// Admin
-// ======================================
-
+// Admin moderation endpoints
 router.get("/admin/all", verifyJWT, verifyAdmin, getAllReviews);
-
 router.patch("/admin/:id/status", verifyJWT, verifyAdmin, updateReviewStatus);
-
 router.delete("/admin/:id", verifyJWT, verifyAdmin, deleteReview);
 
 export default router;
