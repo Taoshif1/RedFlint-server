@@ -1,6 +1,7 @@
 import { ObjectId } from "mongodb";
 import { randomBytes } from "crypto";
 
+import client from "../config/mongodb.js";
 import {
   ordersCollection,
   cartsCollection,
@@ -8,155 +9,9 @@ import {
   settingsCollection,
 } from "../config/database.js";
 
-// ======================================
-// Helper: Calculate products from database
-// ======================================
-
-const prepareOrderProducts = async (items = []) => {
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new Error("No products provided.");
-  }
-
-  const preparedProducts = [];
-
-  for (const item of items) {
-    const productId = item.productId;
-
-    if (!productId || !ObjectId.isValid(productId)) {
-      throw new Error("Invalid product ID.");
-    }
-
-    const quantity = Number(item.quantity);
-
-    if (!Number.isInteger(quantity) || quantity < 1) {
-      throw new Error("Invalid product quantity.");
-    }
-
-    const product = await productsCollection.findOne({
-      _id: new ObjectId(productId),
-    });
-
-    if (!product) {
-      throw new Error("One or more products no longer exist.");
-    }
-
-    // ======================================
-    // Validate selected size
-    // ======================================
-
-    let selectedSize = null;
-
-    if (Array.isArray(product.sizes) && product.sizes.length > 0) {
-      selectedSize = product.sizes.find(
-        (sizeItem) => sizeItem.size === item.size,
-      );
-
-      if (!selectedSize) {
-        throw new Error(`Selected size is unavailable for ${product.title}.`);
-      }
-
-      if (
-        typeof selectedSize.stock === "number" &&
-        quantity > selectedSize.stock
-      ) {
-        throw new Error(
-          `Only ${selectedSize.stock} item(s) available for ${product.title} - ${item.size}.`,
-        );
-      }
-    }
-
-    // ======================================
-    // Server decides the real price
-    // ======================================
-
-    const regularPrice = Number(product.price || 0);
-
-    const sellingPrice =
-      product.offerPrice !== undefined && product.offerPrice !== null
-        ? Number(product.offerPrice)
-        : regularPrice;
-
-    const lineTotal = sellingPrice * quantity;
-
-    preparedProducts.push({
-      productId: product._id.toString(),
-
-      title: product.title,
-
-      image: product.images?.[0] || "",
-
-      size: item.size || "",
-
-      quantity,
-
-      price: regularPrice,
-
-      offerPrice: product.offerPrice ?? null,
-
-      unitPrice: sellingPrice,
-
-      lineTotal,
-    });
-  }
-
-  return preparedProducts;
-};
-
-// ======================================
-// Helper: Calculate totals
-// ======================================
-
-const calculateOrderTotals = async (products) => {
-  const subtotal = products.reduce((sum, item) => sum + item.lineTotal, 0);
-
-  const settings = await settingsCollection.findOne({
-    _id: "store",
-  });
-
-  const shippingFee = Number(settings?.shippingFee ?? 120);
-
-  const freeShipping = Number(settings?.freeShipping ?? 3000);
-
-  let shipping = shippingFee;
-
-  if (subtotal <= 0) {
-    shipping = 0;
-  } else if (freeShipping > 0 && subtotal >= freeShipping) {
-    shipping = 0;
-  }
-
-  const total = subtotal + shipping;
-
-  return {
-    subtotal,
-    shipping,
-    total,
-  };
-};
-
-// ======================================
-// Helper: Check transaction ID
-// ======================================
-
-const validateTransactionId = async (transactionId) => {
-  const cleanTransactionId = transactionId?.trim();
-
-  if (!cleanTransactionId) {
-    throw new Error("Transaction ID is required.");
-  }
-
-  const existingOrder = await ordersCollection.findOne({
-    "payment.transactionId": cleanTransactionId,
-  });
-
-  if (existingOrder) {
-    throw new Error("This transaction ID has already been used.");
-  }
-
-  return cleanTransactionId;
-};
-
 const SUPPORTED_PAYMENT_METHODS = ["bkash", "nagad", "rocket"];
+
+const normalizePhone = (phone = "") => phone.replace(/[\s-]/g, "").trim();
 
 const validatePaymentMethod = (paymentMethod) => {
   const method = paymentMethod?.trim().toLowerCase();
@@ -168,45 +23,260 @@ const validatePaymentMethod = (paymentMethod) => {
   return method;
 };
 
-// ======================================
-// Helper: Normalize phone
-// ======================================
+const assertStoreOperational = async (session) => {
+  const settings = await settingsCollection.findOne(
+    { _id: "store" },
+    { session },
+  );
 
-const normalizePhone = (phone = "") => {
-  return phone.replace(/[\s-]/g, "").trim();
+  if (settings?.maintenanceMode) {
+    throw new Error(
+      "RedFlint is currently under maintenance. Ordering is temporarily unavailable.",
+    );
+  }
+
+  return settings;
 };
 
-// ======================================
-// Helper: Generate customer order number
-// ======================================
+const validateTransactionId = async (transactionId, session) => {
+  const cleanTransactionId = transactionId?.trim();
 
-const generateOrderNumber = async () => {
-  let orderNumber;
-  let exists = true;
+  if (!cleanTransactionId) {
+    throw new Error("Transaction ID is required.");
+  }
 
-  while (exists) {
+  const existingOrder = await ordersCollection.findOne(
+    { "payment.transactionId": cleanTransactionId },
+    { session },
+  );
+
+  if (existingOrder) {
+    throw new Error("This transaction ID has already been used.");
+  }
+
+  return cleanTransactionId;
+};
+
+const generateOrderNumber = async (session) => {
+  while (true) {
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const randomPart = randomBytes(4).toString("hex").toUpperCase();
+    const orderNumber = `RF-${datePart}-${randomPart}`;
 
-    const randomPart = randomBytes(3).toString("hex").toUpperCase();
+    const exists = await ordersCollection.findOne(
+      { orderNumber },
+      { session },
+    );
 
-    orderNumber = `RF-${datePart}-${randomPart}`;
+    if (!exists) return orderNumber;
+  }
+};
 
-    exists = await ordersCollection.findOne({
-      orderNumber,
+const prepareOrderProducts = async (items = [], session) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("No products provided.");
+  }
+
+  const preparedProducts = [];
+
+  for (const item of items) {
+    const productId = item.productId;
+    const quantity = Number(item.quantity);
+
+    if (!productId || !ObjectId.isValid(productId)) {
+      throw new Error("Invalid product ID.");
+    }
+
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      throw new Error("Invalid product quantity.");
+    }
+
+    const product = await productsCollection.findOne(
+      { _id: new ObjectId(productId) },
+      { session },
+    );
+
+    if (!product) {
+      throw new Error("One or more products no longer exist.");
+    }
+
+    const selectedSizeName = item.size || "";
+    const objectSizes = Array.isArray(product.sizes)
+      ? product.sizes.filter(
+          (sizeItem) => sizeItem && typeof sizeItem === "object",
+        )
+      : [];
+    const legacySizes = Array.isArray(product.sizes)
+      ? product.sizes.filter((sizeItem) => typeof sizeItem === "string")
+      : [];
+
+    let inventoryMode = "total";
+    let availableStock = Number(product.totalStock);
+
+    if (objectSizes.length > 0) {
+      const selectedSize = objectSizes.find(
+        (sizeItem) => sizeItem.size === selectedSizeName,
+      );
+
+      if (!selectedSize) {
+        throw new Error(`Selected size is unavailable for ${product.title}.`);
+      }
+
+      inventoryMode = "size";
+      availableStock = Number(selectedSize.stock);
+    } else if (legacySizes.length > 0) {
+      if (!legacySizes.includes(selectedSizeName)) {
+        throw new Error(`Selected size is unavailable for ${product.title}.`);
+      }
+
+      inventoryMode = "legacy";
+    }
+
+    if (!Number.isFinite(availableStock)) {
+      throw new Error(`Stock is not configured correctly for ${product.title}.`);
+    }
+
+    if (quantity > availableStock) {
+      throw new Error(
+        `Only ${Math.max(availableStock, 0)} item(s) available for ${product.title}${selectedSizeName ? ` - ${selectedSizeName}` : ""}.`,
+      );
+    }
+
+    const regularPrice = Number(product.price || 0);
+    const sellingPrice =
+      product.offerPrice !== undefined && product.offerPrice !== null
+        ? Number(product.offerPrice)
+        : regularPrice;
+
+    preparedProducts.push({
+      productId: product._id.toString(),
+      title: product.title,
+      image: product.images?.[0] || "",
+      size: selectedSizeName,
+      quantity,
+      price: regularPrice,
+      offerPrice: product.offerPrice ?? null,
+      unitPrice: sellingPrice,
+      lineTotal: sellingPrice * quantity,
+      _inventoryMode: inventoryMode,
+      _hasTotalStock: Number.isFinite(Number(product.totalStock)),
     });
   }
 
-  return orderNumber;
+  return preparedProducts;
 };
 
-// ======================================
-// CREATE ORDER - REGISTERED USER
-// ======================================
+const reserveInventory = async (preparedProducts, session) => {
+  for (const item of preparedProducts) {
+    const productId = new ObjectId(item.productId);
+    const quantity = item.quantity;
+
+    let result;
+
+    if (item._inventoryMode === "size") {
+      const increment = {
+        "sizes.$[selectedSize].stock": -quantity,
+      };
+
+      if (item._hasTotalStock) {
+        increment.totalStock = -quantity;
+      }
+
+      result = await productsCollection.updateOne(
+        {
+          _id: productId,
+          sizes: {
+            $elemMatch: {
+              size: item.size,
+              stock: { $gte: quantity },
+            },
+          },
+        },
+        {
+          $inc: increment,
+          $set: { updatedAt: new Date() },
+        },
+        {
+          session,
+          arrayFilters: [
+            {
+              "selectedSize.size": item.size,
+              "selectedSize.stock": { $gte: quantity },
+            },
+          ],
+        },
+      );
+    } else {
+      result = await productsCollection.updateOne(
+        {
+          _id: productId,
+          totalStock: { $gte: quantity },
+          ...(item._inventoryMode === "legacy" ? { sizes: item.size } : {}),
+        },
+        {
+          $inc: { totalStock: -quantity },
+          $set: { updatedAt: new Date() },
+        },
+        { session },
+      );
+    }
+
+    if (result.matchedCount === 0) {
+      throw new Error(
+        `Sorry, ${item.title}${item.size ? ` - ${item.size}` : ""} just sold out or no longer has enough stock. Please refresh and try again.`,
+      );
+    }
+  }
+};
+
+const cleanProductsForOrder = (products) =>
+  products.map(({ _inventoryMode, _hasTotalStock, ...product }) => product);
+
+const calculateOrderTotals = (products, settings) => {
+  const subtotal = products.reduce((sum, item) => sum + item.lineTotal, 0);
+  const shippingFee = Number(settings?.shippingFee ?? 120);
+  const freeShipping = Number(settings?.freeShipping ?? 3000);
+
+  let shipping = shippingFee;
+
+  if (subtotal <= 0) {
+    shipping = 0;
+  } else if (freeShipping > 0 && subtotal >= freeShipping) {
+    shipping = 0;
+  }
+
+  return {
+    subtotal,
+    shipping,
+    total: subtotal + shipping,
+  };
+};
+
+const validateCustomerFields = ({ customerName, phone, address }) => {
+  if (!customerName?.trim()) throw new Error("Customer name is required.");
+  if (!phone?.trim()) throw new Error("Phone number is required.");
+  if (!address?.trim()) throw new Error("Delivery address is required.");
+};
+
+const formatOrderError = (error) => {
+  if (error?.code === 11000) {
+    if (error?.keyPattern?.["payment.transactionId"]) {
+      return "This transaction ID has already been used.";
+    }
+
+    if (error?.keyPattern?.orderNumber) {
+      return "Could not generate a unique order number. Please try again.";
+    }
+  }
+
+  return error.message || "Failed to place order.";
+};
 
 export const createOrder = async (req, res) => {
+  const session = client.startSession();
+
   try {
     const userEmail = req.decoded.email;
-
     const {
       customerName,
       phone,
@@ -218,116 +288,74 @@ export const createOrder = async (req, res) => {
       products: requestedProducts,
     } = req.body;
 
-    if (!customerName?.trim()) {
-      return res.status(400).send({
-        success: false,
-        message: "Customer name is required.",
-      });
-    }
+    validateCustomerFields({ customerName, phone, address });
 
-    if (!phone?.trim()) {
-      return res.status(400).send({
-        success: false,
-        message: "Phone number is required.",
-      });
-    }
-
-    if (!address?.trim()) {
-      return res.status(400).send({
-        success: false,
-        message: "Delivery address is required.",
-      });
-    }
-
-    // If products were sent directly,
-    // this is a Buy Now order.
     const isBuyNow =
       Array.isArray(requestedProducts) && requestedProducts.length > 0;
 
-    let sourceItems = [];
+    let insertedId;
+    let orderNumber;
 
-    if (isBuyNow) {
-      sourceItems = requestedProducts;
-    } else {
-      sourceItems = await cartsCollection
-        .find({
-          userEmail,
-        })
-        .toArray();
+    await session.withTransaction(async () => {
+      const settings = await assertStoreOperational(session);
 
-      if (sourceItems.length === 0) {
-        return res.status(400).send({
-          success: false,
-          message: "Your cart is empty.",
-        });
+      const sourceItems = isBuyNow
+        ? requestedProducts
+        : await cartsCollection.find({ userEmail }, { session }).toArray();
+
+      if (!sourceItems.length) {
+        throw new Error("Your cart is empty.");
       }
-    }
 
-    const products = await prepareOrderProducts(sourceItems);
+      const preparedProducts = await prepareOrderProducts(sourceItems, session);
+      const totals = calculateOrderTotals(preparedProducts, settings);
+      const cleanTransactionId = await validateTransactionId(
+        transactionId,
+        session,
+      );
+      const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
 
-    const { subtotal, shipping, total } = await calculateOrderTotals(products);
+      orderNumber = await generateOrderNumber(session);
 
-    const cleanTransactionId = await validateTransactionId(transactionId);
+      await reserveInventory(preparedProducts, session);
 
-    const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
+      const products = cleanProductsForOrder(preparedProducts);
+      const now = new Date();
 
-    const orderNumber = await generateOrderNumber();
-
-    const order = {
-      orderNumber,
-
-      customerType: "registered",
-
-      orderSource: isBuyNow ? "buy_now" : "cart",
-
-      customerName: customerName.trim(),
-
-      phone: normalizePhone(phone),
-
-      email: userEmail,
-
-      userEmail,
-
-      address: address.trim(),
-
-      city: city?.trim() || "",
-
-      postalCode: postalCode?.trim() || "",
-
-      products,
-
-      subtotal,
-
-      shipping,
-
-      total,
-
-      payment: {
-        method: cleanPaymentMethod,
-        transactionId: cleanTransactionId,
-        status: "Pending",
-      },
-
-      orderStatus: "Pending",
-
-      createdAt: new Date(),
-
-      updatedAt: new Date(),
-    };
-
-    const result = await ordersCollection.insertOne(order);
-
-    // Only clear MongoDB cart for normal checkout.
-    // Buy Now should not destroy an existing cart.
-    if (!isBuyNow) {
-      await cartsCollection.deleteMany({
+      const order = {
+        orderNumber,
+        customerType: "registered",
+        orderSource: isBuyNow ? "buy_now" : "cart",
+        customerName: customerName.trim(),
+        phone: normalizePhone(phone),
+        email: userEmail,
         userEmail,
-      });
-    }
+        address: address.trim(),
+        city: city?.trim() || "",
+        postalCode: postalCode?.trim() || "",
+        products,
+        ...totals,
+        payment: {
+          method: cleanPaymentMethod,
+          transactionId: cleanTransactionId,
+          status: "Pending",
+        },
+        orderStatus: "Pending",
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const result = await ordersCollection.insertOne(order, { session });
+      insertedId = result.insertedId;
+
+      if (!isBuyNow) {
+        await cartsCollection.deleteMany({ userEmail }, { session });
+      }
+    });
 
     res.status(201).send({
       success: true,
-      insertedId: result.insertedId,
+      insertedId,
       orderNumber,
       message: "Order placed successfully.",
     });
@@ -336,16 +364,16 @@ export const createOrder = async (req, res) => {
 
     res.status(400).send({
       success: false,
-      message: error.message || "Failed to place order.",
+      message: formatOrderError(error),
     });
+  } finally {
+    await session.endSession();
   }
 };
 
-// ======================================
-// CREATE ORDER - GUEST USER
-// ======================================
-
 export const createGuestOrder = async (req, res) => {
+  const session = client.startSession();
+
   try {
     const {
       customerName,
@@ -360,88 +388,65 @@ export const createGuestOrder = async (req, res) => {
       products: requestedProducts,
     } = req.body;
 
-    if (!customerName?.trim()) {
-      return res.status(400).send({
-        success: false,
-        message: "Customer name is required.",
-      });
-    }
-
-    if (!phone?.trim()) {
-      return res.status(400).send({
-        success: false,
-        message: "Phone number is required.",
-      });
-    }
-
-    if (!address?.trim()) {
-      return res.status(400).send({
-        success: false,
-        message: "Delivery address is required.",
-      });
-    }
+    validateCustomerFields({ customerName, phone, address });
 
     if (!Array.isArray(requestedProducts) || requestedProducts.length === 0) {
-      return res.status(400).send({
-        success: false,
-        message: "No products selected.",
-      });
+      throw new Error("No products selected.");
     }
 
-    const products = await prepareOrderProducts(requestedProducts);
+    let insertedId;
+    let orderNumber;
 
-    const { subtotal, shipping, total } = await calculateOrderTotals(products);
+    await session.withTransaction(async () => {
+      const settings = await assertStoreOperational(session);
+      const preparedProducts = await prepareOrderProducts(
+        requestedProducts,
+        session,
+      );
+      const totals = calculateOrderTotals(preparedProducts, settings);
+      const cleanTransactionId = await validateTransactionId(
+        transactionId,
+        session,
+      );
+      const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
 
-    const cleanTransactionId = await validateTransactionId(transactionId);
+      orderNumber = await generateOrderNumber(session);
 
-    const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
+      await reserveInventory(preparedProducts, session);
 
-    const orderNumber = await generateOrderNumber();
+      const products = cleanProductsForOrder(preparedProducts);
+      const now = new Date();
 
-    const order = {
-      orderNumber,
-      customerType: "guest",
-      orderSource: orderSource === "buy_now" ? "buy_now" : "cart",
-      customerName: customerName.trim(),
+      const order = {
+        orderNumber,
+        customerType: "guest",
+        orderSource: orderSource === "buy_now" ? "buy_now" : "cart",
+        customerName: customerName.trim(),
+        phone: normalizePhone(phone),
+        email: email?.trim() || "",
+        userEmail: null,
+        address: address.trim(),
+        city: city?.trim() || "",
+        postalCode: postalCode?.trim() || "",
+        products,
+        ...totals,
+        payment: {
+          method: cleanPaymentMethod,
+          transactionId: cleanTransactionId,
+          status: "Pending",
+        },
+        orderStatus: "Pending",
+        createdAt: now,
+        updatedAt: now,
+      };
 
-      phone: normalizePhone(phone),
-
-      email: email?.trim() || "",
-
-      userEmail: null,
-
-      address: address.trim(),
-
-      city: city?.trim() || "",
-
-      postalCode: postalCode?.trim() || "",
-
-      products,
-
-      subtotal,
-
-      shipping,
-
-      total,
-
-      payment: {
-        method: cleanPaymentMethod,
-        transactionId: cleanTransactionId,
-        status: "Pending",
-      },
-
-      orderStatus: "Pending",
-
-      createdAt: new Date(),
-
-      updatedAt: new Date(),
-    };
-
-    const result = await ordersCollection.insertOne(order);
+      const result = await ordersCollection.insertOne(order, { session });
+      insertedId = result.insertedId;
+    });
 
     res.status(201).send({
       success: true,
-      insertedId: result.insertedId,
+      insertedId,
       orderNumber,
       message: "Guest order placed successfully.",
     });
@@ -450,14 +455,12 @@ export const createGuestOrder = async (req, res) => {
 
     res.status(400).send({
       success: false,
-      message: error.message || "Failed to place guest order.",
+      message: formatOrderError(error),
     });
+  } finally {
+    await session.endSession();
   }
 };
-
-// ======================================
-// TRACK ORDER - PUBLIC
-// ======================================
 
 export const trackOrder = async (req, res) => {
   try {
@@ -478,17 +481,8 @@ export const trackOrder = async (req, res) => {
     }
 
     const cleanOrderNumber = orderNumber.trim();
-
     const cleanPhone = normalizePhone(phone);
-
-    // ======================================
-    // Support new RF order numbers
-    // and old MongoDB order IDs
-    // ======================================
-
-    let query = {
-      phone: cleanPhone,
-    };
+    const query = { phone: cleanPhone };
 
     if (
       ObjectId.isValid(cleanOrderNumber) &&
@@ -508,57 +502,34 @@ export const trackOrder = async (req, res) => {
       });
     }
 
-    // ======================================
-    // Return only safe tracking information
-    // ======================================
-
     const safeProducts =
       order.products?.map((item) => ({
         productId: item.productId,
-
         title: item.title,
-
         image: item.image,
-
         size: item.size,
-
         quantity: item.quantity,
-
         unitPrice: item.unitPrice,
-
         lineTotal: item.lineTotal,
       })) || [];
 
     res.send({
       success: true,
-
       order: {
         orderNumber: order.orderNumber || order._id.toString(),
-
         customerName: order.customerName,
-
         customerType: order.customerType || "registered",
-
         orderSource: order.orderSource || "cart",
-
         products: safeProducts,
-
         subtotal: order.subtotal,
-
         shipping: order.shipping,
-
         total: order.total,
-
         payment: {
           method: order.payment?.method,
-
           status: order.payment?.status,
         },
-
         orderStatus: order.orderStatus,
-
         createdAt: order.createdAt,
-
         updatedAt: order.updatedAt,
       },
     });
@@ -572,21 +543,11 @@ export const trackOrder = async (req, res) => {
   }
 };
 
-// ======================================
-// GET MY ORDERS
-// ======================================
-
 export const getMyOrders = async (req, res) => {
   try {
-    const userEmail = req.decoded.email;
-
     const orders = await ordersCollection
-      .find({
-        userEmail,
-      })
-      .sort({
-        createdAt: -1,
-      })
+      .find({ userEmail: req.decoded.email })
+      .sort({ createdAt: -1 })
       .toArray();
 
     res.send(orders);
@@ -598,15 +559,9 @@ export const getMyOrders = async (req, res) => {
   }
 };
 
-// ======================================
-// GET MY SINGLE ORDER
-// ======================================
-
 export const getMyOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const userEmail = req.decoded.email;
 
     if (!ObjectId.isValid(id)) {
       return res.status(400).send({
@@ -617,8 +572,7 @@ export const getMyOrderById = async (req, res) => {
 
     const order = await ordersCollection.findOne({
       _id: new ObjectId(id),
-
-      userEmail,
+      userEmail: req.decoded.email,
     });
 
     if (!order) {
@@ -636,9 +590,5 @@ export const getMyOrderById = async (req, res) => {
     });
   }
 };
-
-// ======================================
-// Compatibility export
-// ======================================
 
 export const getSingleOrder = getMyOrderById;

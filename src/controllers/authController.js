@@ -1,43 +1,44 @@
 import generateToken from "../utils/generateToken.js";
+import verifyFirebaseIdToken from "../utils/verifyFirebaseIdToken.js";
+
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+};
 
 export const createJWT = async (req, res) => {
   try {
-    const { email, uid } = req.body;
+    const { idToken } = req.body;
+
+    const firebaseUser = await verifyFirebaseIdToken(idToken);
 
     const token = generateToken({
-      email,
-      uid,
+      email: firebaseUser.email,
+      uid: firebaseUser.uid,
     });
 
-    res
-      .cookie("token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      })
-      .status(200)
-      .send({
-        success: true,
-        message: "JWT Created Successfully",
-      });
+    res.cookie("token", token, cookieOptions).status(200).send({
+      success: true,
+      message: "Authenticated session created successfully.",
+      user: {
+        email: firebaseUser.email,
+        uid: firebaseUser.uid,
+      },
+    });
   } catch (error) {
-    res.status(500).send({
+    console.error("JWT creation error:", error.message);
+
+    res.status(401).send({
       success: false,
-      message: error.message,
+      message: "Unable to verify Firebase authentication.",
     });
   }
 };
 
 export const logout = (req, res) => {
-  res
-    .clearCookie("token", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    })
-    .status(200)
-    .send({
-      success: true,
-      message: "Logged Out Successfully",
-    });
+  res.clearCookie("token", cookieOptions).status(200).send({
+    success: true,
+    message: "Logged Out Successfully",
+  });
 };
