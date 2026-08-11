@@ -10,7 +10,7 @@ import {
 
 const router = Router();
 
-router.post("/", createUser);
+router.post("/", verifyJWT, createUser);
 
 router.get("/:email", verifyJWT, getUserByEmail);
 
