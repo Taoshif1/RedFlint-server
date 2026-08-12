@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 
 import client from "./config/mongodb.js";
-import { ordersCollection } from "./config/database.js";
+import { ordersCollection, productsCollection } from "./config/database.js";
 
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -72,6 +72,17 @@ async function run() {
         { "payment.transactionId": 1 },
         { unique: true, sparse: true },
       ),
+      productsCollection.createIndex({ createdAt: -1, _id: -1 }),
+      productsCollection.createIndex({
+        isFeatured: 1,
+        createdAt: -1,
+        _id: -1,
+      }),
+      productsCollection.createIndex({
+        isSpecial: 1,
+        createdAt: -1,
+        _id: -1,
+      }),
     ]);
 
     console.log("✅ Connected to MongoDB Atlas");
