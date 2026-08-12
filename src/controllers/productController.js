@@ -1,6 +1,47 @@
 import { ObjectId } from "mongodb";
 import { productsCollection } from "../config/database.js";
 
+const PRODUCT_CARD_PROJECTION = {
+  title: 1,
+  price: 1,
+  offerPrice: 1,
+  category: 1,
+  season: 1,
+  isFeatured: 1,
+  isSpecial: 1,
+  totalStock: 1,
+  images: { $slice: 1 },
+};
+
+const getPublicLimit = (value) => {
+  const parsedLimit = Number.parseInt(value, 10);
+
+  if (!Number.isFinite(parsedLimit) || parsedLimit <= 0) return 0;
+
+  return Math.min(parsedLimit, 48);
+};
+
+const applyPublicProductOptions = (cursor, req) => {
+  if (req.query.view === "card") {
+    cursor.project(PRODUCT_CARD_PROJECTION);
+  }
+
+  const limit = getPublicLimit(req.query.limit);
+
+  if (limit > 0) {
+    cursor.limit(limit);
+  }
+
+  return cursor;
+};
+
+const setPublicCache = (res, maxAge = 60) => {
+  res.set(
+    "Cache-Control",
+    `public, max-age=${maxAge}, stale-while-revalidate=300`,
+  );
+};
+
 const normalizeProductPayload = (payload = {}) => {
   const product = { ...payload };
 
@@ -61,11 +102,13 @@ export const getProducts = async (req, res) => {
       newest: { createdAt: -1, _id: -1 },
     };
 
-    const products = await productsCollection
+    const cursor = productsCollection
       .find(query)
-      .sort(sortOptions[sort] || sortOptions.newest)
-      .toArray();
+      .sort(sortOptions[sort] || sortOptions.newest);
 
+    const products = await applyPublicProductOptions(cursor, req).toArray();
+
+    setPublicCache(res);
     res.status(200).send(products);
   } catch (error) {
     console.error("Get products error:", error);
@@ -95,6 +138,7 @@ export const getProductById = async (req, res) => {
       });
     }
 
+    setPublicCache(res, 120);
     res.send(product);
   } catch (error) {
     res.status(500).send({ success: false, message: error.message });
@@ -175,7 +219,12 @@ export const deleteProduct = async (req, res) => {
 
 export const getSpecialEditionProducts = async (req, res) => {
   try {
-    const products = await productsCollection.find({ isSpecial: true }).toArray();
+    const cursor = productsCollection
+      .find({ isSpecial: true })
+      .sort({ createdAt: -1, _id: -1 });
+    const products = await applyPublicProductOptions(cursor, req).toArray();
+
+    setPublicCache(res);
     res.send(products);
   } catch (error) {
     res.status(500).send({ success: false, message: error.message });
@@ -184,7 +233,12 @@ export const getSpecialEditionProducts = async (req, res) => {
 
 export const getFeaturedProducts = async (req, res) => {
   try {
-    const products = await productsCollection.find({ isFeatured: true }).toArray();
+    const cursor = productsCollection
+      .find({ isFeatured: true })
+      .sort({ createdAt: -1, _id: -1 });
+    const products = await applyPublicProductOptions(cursor, req).toArray();
+
+    setPublicCache(res);
     res.send(products);
   } catch (error) {
     console.error("Featured products error:", error);
