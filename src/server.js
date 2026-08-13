@@ -5,8 +5,7 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 
-import client from "./config/mongodb.js";
-import { ordersCollection, productsCollection } from "./config/database.js";
+import { ensureDatabaseReady } from "./config/databaseReady.js";
 
 import productRoutes from "./routes/productRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -87,6 +86,24 @@ app.use(express.json({ limit: "100kb" }));
 app.use(cookieParser());
 app.use("/api", apiLimiter);
 
+app.get("/api/health", (req, res) => {
+  res.send({ success: true, service: "redflint-server" });
+});
+
+app.use("/api", async (req, res, next) => {
+  try {
+    await ensureDatabaseReady();
+    return next();
+  } catch (error) {
+    console.error("Database unavailable:", error);
+
+    return res.status(503).send({
+      success: false,
+      message: "Service temporarily unavailable.",
+    });
+  }
+});
+
 app.use("/api/users", userRoutes);
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/products", productRoutes);
@@ -100,10 +117,6 @@ app.use("/api/reviews", reviewRoutes);
 
 app.get("/", (req, res) => {
   res.send("🔥 RedFlint Server Running...");
-});
-
-app.get("/api/health", (req, res) => {
-  res.send({ success: true, service: "redflint-server" });
 });
 
 app.use((req, res) => {
@@ -127,41 +140,14 @@ app.use((error, req, res, next) => {
   });
 });
 
-async function run() {
-  try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-
-    await Promise.all([
-      ordersCollection.createIndex(
-        { orderNumber: 1 },
-        { unique: true, sparse: true },
-      ),
-      ordersCollection.createIndex(
-        { "payment.transactionId": 1 },
-        { unique: true, sparse: true },
-      ),
-      productsCollection.createIndex({ createdAt: -1, _id: -1 }),
-      productsCollection.createIndex({
-        isFeatured: 1,
-        createdAt: -1,
-        _id: -1,
-      }),
-      productsCollection.createIndex({
-        isSpecial: 1,
-        createdAt: -1,
-        _id: -1,
-      }),
-    ]);
-
+ensureDatabaseReady()
+  .then(() => {
     console.log("✅ Connected to MongoDB Atlas");
     console.log("✅ Production indexes ready");
-  } catch (error) {
+  })
+  .catch((error) => {
     console.error("MongoDB startup error:", error);
-  }
-}
-
-run().catch(console.error);
+  });
 
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
