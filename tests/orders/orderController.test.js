@@ -298,6 +298,57 @@ describe("Order Controller", () => {
   });
 
   // TC-BE-ORDER-003
+  it.each(["bkash", "nagad"])(
+    "requires a transaction ID for enabled %s orders",
+    async (paymentMethod) => {
+      const productId = new ObjectId().toString();
+
+      mocks.settingsFindOne.mockResolvedValue({
+        maintenanceMode: false,
+        shippingFee: 120,
+        freeShipping: 3000,
+        paymentMethods: {
+          [paymentMethod]: {
+            enabled: true,
+            accountNumber: `TEST-${paymentMethod.toUpperCase()}-ACCOUNT`,
+            accountType: "Merchant",
+            instructions: `Send payment with ${paymentMethod}.`,
+          },
+        },
+      });
+
+      mocks.productsFindOne.mockResolvedValue({
+        _id: new ObjectId(productId),
+        title: "Premium Shirt",
+        price: 2000,
+        totalStock: 5,
+        sizes: [{ size: "M", stock: 5 }],
+      });
+
+      const req = {
+        decoded: { email: "customer@example.com" },
+        body: {
+          customerName: "Customer",
+          phone: "01700000000",
+          address: "Dhaka",
+          paymentMethod,
+          products: [{ productId, quantity: 1, size: "M" }],
+        },
+      };
+      const res = createResponse();
+
+      await createOrder(req, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.send).toHaveBeenCalledWith({
+        success: false,
+        message: "Transaction ID is required.",
+      });
+      expect(mocks.ordersInsertOne).not.toHaveBeenCalled();
+    },
+  );
+
+  // TC-BE-ORDER-004
   it("rejects a transaction ID that has already been used", async () => {
     const productId = new ObjectId().toString();
 
@@ -364,7 +415,61 @@ describe("Order Controller", () => {
     expect(mocks.ordersInsertOne).not.toHaveBeenCalled();
   });
 
-  // TC-BE-ORDER-004
+  // TC-BE-ORDER-005
+  it("rejects a duplicate Nagad transaction ID", async () => {
+    const productId = new ObjectId().toString();
+
+    mocks.settingsFindOne.mockResolvedValue({
+      maintenanceMode: false,
+      shippingFee: 120,
+      freeShipping: 3000,
+      paymentMethods: {
+        nagad: {
+          enabled: true,
+          accountNumber: "TEST-NAGAD-ACCOUNT",
+          accountType: "Merchant",
+          instructions: "Send payment with Nagad.",
+        },
+      },
+    });
+
+    mocks.productsFindOne.mockResolvedValue({
+      _id: new ObjectId(productId),
+      title: "Premium Shirt",
+      price: 2000,
+      totalStock: 5,
+      sizes: [{ size: "M", stock: 5 }],
+    });
+
+    mocks.ordersFindOne.mockResolvedValueOnce({
+      orderNumber: "RF-OLD-NAGAD",
+      payment: { transactionId: "USED-NAGAD-TX" },
+    });
+
+    const req = {
+      decoded: { email: "customer@example.com" },
+      body: {
+        customerName: "Customer",
+        phone: "01700000000",
+        address: "Dhaka",
+        paymentMethod: "nagad",
+        transactionId: "USED-NAGAD-TX",
+        products: [{ productId, quantity: 1, size: "M" }],
+      },
+    };
+    const res = createResponse();
+
+    await createOrder(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "This transaction ID has already been used.",
+    });
+    expect(mocks.ordersInsertOne).not.toHaveBeenCalled();
+  });
+
+  // TC-BE-ORDER-006
   it("rejects order if stock becomes unavailable during inventory reservation", async () => {
     const productId = new ObjectId().toString();
 
@@ -433,7 +538,7 @@ describe("Order Controller", () => {
     expect(mocks.ordersInsertOne).not.toHaveBeenCalled();
   });
 
-  // TC-BE-ORDER-005
+  // TC-BE-ORDER-007
   it("creates a COD guest order without storing a transaction ID", async () => {
     const productId = new ObjectId().toString();
     const insertedId = new ObjectId();
@@ -487,7 +592,7 @@ describe("Order Controller", () => {
     expect(res.status).toHaveBeenCalledWith(201);
   });
 
-  // TC-BE-ORDER-006
+  // TC-BE-ORDER-008
   it("rejects guest checkout when no products are selected", async () => {
     const req = {
       body: {
@@ -515,7 +620,7 @@ describe("Order Controller", () => {
     expect(mocks.sessionEndSession).toHaveBeenCalledTimes(1);
   });
 
-  // TC-BE-ORDER-007
+  // TC-BE-ORDER-009
   it("requires an order number when tracking an order", async () => {
     const req = {
       body: {
@@ -538,7 +643,7 @@ describe("Order Controller", () => {
     expect(mocks.ordersFindOne).not.toHaveBeenCalled();
   });
 
-  // TC-BE-ORDER-008
+  // TC-BE-ORDER-010
   it("returns safe order information when tracking succeeds", async () => {
     const orderId = new ObjectId();
 
@@ -626,7 +731,7 @@ describe("Order Controller", () => {
     expect(response.order.products[0].privateField).toBeUndefined();
   });
 
-  // TC-BE-ORDER-009
+  // TC-BE-ORDER-011
   it("returns only orders belonging to the authenticated user", async () => {
     const orders = [
       {
@@ -662,7 +767,7 @@ describe("Order Controller", () => {
     expect(res.send).toHaveBeenCalledWith(orders);
   });
 
-  // TC-BE-ORDER-010
+  // TC-BE-ORDER-012
   it("does not return another user's order by ID", async () => {
     const id = new ObjectId().toString();
 
