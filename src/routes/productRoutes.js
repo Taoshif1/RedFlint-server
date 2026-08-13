@@ -18,6 +18,7 @@ router.get("/", getProducts);
 
 // Specific routes must stay above /:id
 router.get("/featured", getFeaturedProducts);
+router.get("/special", getSpecialEditionProducts);
 router.get("/special-edition", getSpecialEditionProducts);
 
 router.get("/:id", getProductById);
