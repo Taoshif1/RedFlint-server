@@ -35,11 +35,8 @@ const applyPublicProductOptions = (cursor, req) => {
   return cursor;
 };
 
-const setPublicCache = (res, maxAge = 60) => {
-  res.set(
-    "Cache-Control",
-    `public, max-age=${maxAge}, stale-while-revalidate=300`,
-  );
+const setInventoryNoStore = (res) => {
+  res.set("Cache-Control", "no-store");
 };
 
 const normalizeProductPayload = (payload = {}) => {
@@ -108,7 +105,7 @@ export const getProducts = async (req, res) => {
 
     const products = await applyPublicProductOptions(cursor, req).toArray();
 
-    setPublicCache(res);
+    setInventoryNoStore(res);
     res.status(200).send(products);
   } catch (error) {
     console.error("Get products error:", error);
@@ -138,7 +135,7 @@ export const getProductById = async (req, res) => {
       });
     }
 
-    setPublicCache(res, 120);
+    setInventoryNoStore(res);
     res.send(product);
   } catch (error) {
     res.status(500).send({ success: false, message: error.message });
@@ -224,7 +221,7 @@ export const getSpecialEditionProducts = async (req, res) => {
       .sort({ createdAt: -1, _id: -1 });
     const products = await applyPublicProductOptions(cursor, req).toArray();
 
-    setPublicCache(res);
+    setInventoryNoStore(res);
     res.send(products);
   } catch (error) {
     res.status(500).send({ success: false, message: error.message });
@@ -238,7 +235,7 @@ export const getFeaturedProducts = async (req, res) => {
       .sort({ createdAt: -1, _id: -1 });
     const products = await applyPublicProductOptions(cursor, req).toArray();
 
-    setPublicCache(res);
+    setInventoryNoStore(res);
     res.send(products);
   } catch (error) {
     console.error("Featured products error:", error);

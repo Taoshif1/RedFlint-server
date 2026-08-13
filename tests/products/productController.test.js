@@ -22,6 +22,8 @@ vi.mock("../../src/config/database.js", () => ({
 import {
   getProducts,
   getProductById,
+  getFeaturedProducts,
+  getSpecialEditionProducts,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -126,7 +128,7 @@ describe("Product Controller", () => {
 
     expect(res.set).toHaveBeenCalledWith(
       "Cache-Control",
-      "public, max-age=60, stale-while-revalidate=300",
+      "no-store",
     );
   });
 
@@ -180,13 +182,40 @@ describe("Product Controller", () => {
 
     expect(res.set).toHaveBeenCalledWith(
       "Cache-Control",
-      "public, max-age=120, stale-while-revalidate=300",
+      "no-store",
     );
 
     expect(res.send).toHaveBeenCalledWith(product);
   });
 
   // TC-BE-PROD-004
+  it.each([
+    ["featured", getFeaturedProducts, { isFeatured: true }],
+    ["special", getSpecialEditionProducts, { isSpecial: true }],
+  ])(
+    "prevents caching current stock in the %s product response",
+    async (label, controller, query) => {
+      const products = [
+        {
+          _id: "1",
+          title: `${label} product`,
+          totalStock: 1,
+        },
+      ];
+      const cursor = createCursor(products);
+      mocks.find.mockReturnValue(cursor);
+      const req = { query: {} };
+      const res = createResponse();
+
+      await controller(req, res);
+
+      expect(mocks.find).toHaveBeenCalledWith(query);
+      expect(res.set).toHaveBeenCalledWith("Cache-Control", "no-store");
+      expect(res.send).toHaveBeenCalledWith(products);
+    },
+  );
+
+  // TC-BE-PROD-005
   it("normalizes product stock and price before creating product", async () => {
     const insertedId = new ObjectId();
 
@@ -245,7 +274,7 @@ describe("Product Controller", () => {
     });
   });
 
-  // TC-BE-PROD-005
+  // TC-BE-PROD-006
   it("returns not found when updating a missing product", async () => {
     const id = new ObjectId().toString();
 
@@ -289,7 +318,7 @@ describe("Product Controller", () => {
     });
   });
 
-  // TC-BE-PROD-006
+  // TC-BE-PROD-007
   it("deletes a product using a valid product ID", async () => {
     const id = new ObjectId().toString();
 
