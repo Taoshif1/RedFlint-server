@@ -94,6 +94,17 @@ const createOrderCursor = (orders = []) => {
   return cursor;
 };
 
+const enabledBkashSettings = {
+  paymentMethods: {
+    bkash: {
+      enabled: true,
+      accountNumber: "TEST-BKASH-MERCHANT",
+      accountType: "Merchant",
+      instructions: "Use the test merchant account.",
+    },
+  },
+};
+
 describe("Order Controller", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -121,6 +132,7 @@ describe("Order Controller", () => {
     const insertedId = new ObjectId();
 
     mocks.settingsFindOne.mockResolvedValue({
+      ...enabledBkashSettings,
       shippingFee: 120,
       freeShipping: 3000,
       maintenanceMode: false,
@@ -161,7 +173,7 @@ describe("Order Controller", () => {
 
       body: {
         customerName: " Customer Name ",
-        phone: "017 123-456",
+        phone: "017 1234-5678",
         address: " Dhaka ",
         city: " Dhaka ",
         postalCode: "1200",
@@ -192,7 +204,7 @@ describe("Order Controller", () => {
         orderSource: "buy_now",
 
         customerName: "Customer Name",
-        phone: "017123456",
+        phone: "01712345678",
         email: "customer@example.com",
         userEmail: "customer@example.com",
         address: "Dhaka",
@@ -290,6 +302,7 @@ describe("Order Controller", () => {
     const productId = new ObjectId().toString();
 
     mocks.settingsFindOne.mockResolvedValue({
+      ...enabledBkashSettings,
       maintenanceMode: false,
       shippingFee: 120,
       freeShipping: 3000,
@@ -356,6 +369,7 @@ describe("Order Controller", () => {
     const productId = new ObjectId().toString();
 
     mocks.settingsFindOne.mockResolvedValue({
+      ...enabledBkashSettings,
       maintenanceMode: false,
       shippingFee: 120,
       freeShipping: 3000,
@@ -420,6 +434,60 @@ describe("Order Controller", () => {
   });
 
   // TC-BE-ORDER-005
+  it("creates a COD guest order without storing a transaction ID", async () => {
+    const productId = new ObjectId().toString();
+    const insertedId = new ObjectId();
+
+    mocks.settingsFindOne.mockResolvedValue({
+      maintenanceMode: false,
+      shippingFee: 120,
+      freeShipping: 3000,
+    });
+    mocks.productsFindOne.mockResolvedValue({
+      _id: new ObjectId(productId),
+      title: "Premium Shirt",
+      price: 1500,
+      images: ["shirt.jpg"],
+      totalStock: 3,
+      sizes: [{ size: "M", stock: 3 }],
+    });
+    mocks.ordersFindOne.mockResolvedValueOnce(null);
+    mocks.productsUpdateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    mocks.ordersInsertOne.mockResolvedValue({ insertedId });
+
+    const req = {
+      body: {
+        customerName: "COD Customer",
+        phone: "01712345678",
+        address: "Dhaka",
+        city: "Dhaka",
+        paymentMethod: "cod",
+        products: [{ productId, quantity: 1, size: "M" }],
+      },
+    };
+    const res = createResponse();
+
+    await createGuestOrder(req, res);
+
+    expect(mocks.ordersInsertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: {
+          method: "cod",
+          status: "Due",
+        },
+      }),
+      { session: mocks.session },
+    );
+    expect(mocks.ordersInsertOne.mock.calls[0][0].payment).not.toHaveProperty(
+      "transactionId",
+    );
+    expect(res.status).toHaveBeenCalledWith(201);
+  });
+
+  // TC-BE-ORDER-006
   it("rejects guest checkout when no products are selected", async () => {
     const req = {
       body: {
@@ -447,7 +515,7 @@ describe("Order Controller", () => {
     expect(mocks.sessionEndSession).toHaveBeenCalledTimes(1);
   });
 
-  // TC-BE-ORDER-006
+  // TC-BE-ORDER-007
   it("requires an order number when tracking an order", async () => {
     const req = {
       body: {
@@ -470,7 +538,7 @@ describe("Order Controller", () => {
     expect(mocks.ordersFindOne).not.toHaveBeenCalled();
   });
 
-  // TC-BE-ORDER-007
+  // TC-BE-ORDER-008
   it("returns safe order information when tracking succeeds", async () => {
     const orderId = new ObjectId();
 
@@ -558,7 +626,7 @@ describe("Order Controller", () => {
     expect(response.order.products[0].privateField).toBeUndefined();
   });
 
-  // TC-BE-ORDER-008
+  // TC-BE-ORDER-009
   it("returns only orders belonging to the authenticated user", async () => {
     const orders = [
       {
@@ -594,7 +662,7 @@ describe("Order Controller", () => {
     expect(res.send).toHaveBeenCalledWith(orders);
   });
 
-  // TC-BE-ORDER-009
+  // TC-BE-ORDER-010
   it("does not return another user's order by ID", async () => {
     const id = new ObjectId().toString();
 

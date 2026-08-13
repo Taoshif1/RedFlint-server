@@ -184,7 +184,7 @@ export const verifyPayment = async (req, res) => {
       return res.status(400).send({ success: false, message: "Invalid order ID." });
     }
 
-    if (!["Pending", "Verified"].includes(status)) {
+    if (!["Due", "Pending", "Verified"].includes(status)) {
       return res.status(400).send({ success: false, message: "Invalid payment status." });
     }
 
