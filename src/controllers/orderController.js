@@ -8,16 +8,19 @@ import {
   productsCollection,
   settingsCollection,
 } from "../config/database.js";
+import { getPaymentMethods, withStoreDefaults } from "../utils/storeSettings.js";
 
-const SUPPORTED_PAYMENT_METHODS = ["bkash", "nagad", "rocket"];
+const MAX_ORDER_ITEMS = 50;
+const MAX_ITEM_QUANTITY = 99;
 
 const normalizePhone = (phone = "") => phone.replace(/[\s-]/g, "").trim();
 
-const validatePaymentMethod = (paymentMethod) => {
+const validatePaymentMethod = (paymentMethod, settings) => {
   const method = paymentMethod?.trim().toLowerCase();
+  const paymentMethods = getPaymentMethods(settings);
 
-  if (!SUPPORTED_PAYMENT_METHODS.includes(method)) {
-    throw new Error("Invalid payment method.");
+  if (!paymentMethods[method]?.enabled) {
+    throw new Error("This payment method is not available.");
   }
 
   return method;
@@ -35,14 +38,24 @@ const assertStoreOperational = async (session) => {
     );
   }
 
-  return settings;
+  return withStoreDefaults(settings || {});
 };
 
-const validateTransactionId = async (transactionId, session) => {
+const validateTransactionId = async (transactionId, paymentMethod, session) => {
+  if (paymentMethod === "cod") return undefined;
+
   const cleanTransactionId = transactionId?.trim();
 
   if (!cleanTransactionId) {
     throw new Error("Transaction ID is required.");
+  }
+
+  if (
+    cleanTransactionId.length < 4 ||
+    cleanTransactionId.length > 64 ||
+    !/^[A-Za-z0-9_-]+$/.test(cleanTransactionId)
+  ) {
+    throw new Error("Transaction ID format is invalid.");
   }
 
   const existingOrder = await ordersCollection.findOne(
@@ -77,6 +90,10 @@ const prepareOrderProducts = async (items = [], session) => {
     throw new Error("No products provided.");
   }
 
+  if (items.length > MAX_ORDER_ITEMS) {
+    throw new Error(`An order cannot contain more than ${MAX_ORDER_ITEMS} items.`);
+  }
+
   const preparedProducts = [];
 
   for (const item of items) {
@@ -87,7 +104,11 @@ const prepareOrderProducts = async (items = [], session) => {
       throw new Error("Invalid product ID.");
     }
 
-    if (!Number.isInteger(quantity) || quantity < 1) {
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < 1 ||
+      quantity > MAX_ITEM_QUANTITY
+    ) {
       throw new Error("Invalid product quantity.");
     }
 
@@ -147,6 +168,15 @@ const prepareOrderProducts = async (items = [], session) => {
       product.offerPrice !== undefined && product.offerPrice !== null
         ? Number(product.offerPrice)
         : regularPrice;
+
+    if (
+      !Number.isFinite(regularPrice) ||
+      regularPrice < 0 ||
+      !Number.isFinite(sellingPrice) ||
+      sellingPrice < 0
+    ) {
+      throw new Error(`Price is not configured correctly for ${product.title}.`);
+    }
 
     preparedProducts.push({
       productId: product._id.toString(),
@@ -252,11 +282,46 @@ const calculateOrderTotals = (products, settings) => {
   };
 };
 
-const validateCustomerFields = ({ customerName, phone, address }) => {
-  if (!customerName?.trim()) throw new Error("Customer name is required.");
-  if (!phone?.trim()) throw new Error("Phone number is required.");
-  if (!address?.trim()) throw new Error("Delivery address is required.");
+const validateCustomerFields = ({
+  customerName,
+  phone,
+  address,
+  city = "",
+  postalCode = "",
+  email = "",
+}) => {
+  const cleanName = customerName?.trim();
+  const cleanPhone = normalizePhone(phone);
+  const cleanAddress = address?.trim();
+  const cleanCity = city?.trim();
+  const cleanPostalCode = postalCode?.trim();
+  const cleanEmail = email?.trim();
+
+  if (!cleanName) throw new Error("Customer name is required.");
+  if (cleanName.length > 100) throw new Error("Customer name is too long.");
+  if (!cleanPhone) throw new Error("Phone number is required.");
+  if (!/^01[3-9]\d{8}$/.test(cleanPhone)) {
+    throw new Error("Enter a valid Bangladesh phone number.");
+  }
+  if (!cleanAddress) throw new Error("Delivery address is required.");
+  if (cleanAddress.length > 500) {
+    throw new Error("Delivery address is too long.");
+  }
+  if (cleanCity.length > 100) throw new Error("City is too long.");
+  if (cleanPostalCode.length > 20) throw new Error("Postal code is too long.");
+  if (
+    cleanEmail &&
+    (cleanEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail))
+  ) {
+    throw new Error("Email address is invalid.");
+  }
 };
+
+const buildPayment = (method, transactionId) => ({
+  method,
+  status: method === "cod" ? "Due" : "Pending",
+  ...(transactionId ? { transactionId } : {}),
+});
 
 const formatOrderError = (error) => {
   if (error?.code === 11000) {
@@ -288,7 +353,13 @@ export const createOrder = async (req, res) => {
       products: requestedProducts,
     } = req.body;
 
-    validateCustomerFields({ customerName, phone, address });
+    validateCustomerFields({
+      customerName,
+      phone,
+      address,
+      city,
+      postalCode,
+    });
 
     const isBuyNow =
       Array.isArray(requestedProducts) && requestedProducts.length > 0;
@@ -309,11 +380,12 @@ export const createOrder = async (req, res) => {
 
       const preparedProducts = await prepareOrderProducts(sourceItems, session);
       const totals = calculateOrderTotals(preparedProducts, settings);
+      const cleanPaymentMethod = validatePaymentMethod(paymentMethod, settings);
       const cleanTransactionId = await validateTransactionId(
         transactionId,
+        cleanPaymentMethod,
         session,
       );
-      const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
 
       orderNumber = await generateOrderNumber(session);
 
@@ -335,11 +407,7 @@ export const createOrder = async (req, res) => {
         postalCode: postalCode?.trim() || "",
         products,
         ...totals,
-        payment: {
-          method: cleanPaymentMethod,
-          transactionId: cleanTransactionId,
-          status: "Pending",
-        },
+        payment: buildPayment(cleanPaymentMethod, cleanTransactionId),
         orderStatus: "Pending",
         createdAt: now,
         updatedAt: now,
@@ -388,7 +456,14 @@ export const createGuestOrder = async (req, res) => {
       products: requestedProducts,
     } = req.body;
 
-    validateCustomerFields({ customerName, phone, address });
+    validateCustomerFields({
+      customerName,
+      phone,
+      address,
+      city,
+      postalCode,
+      email,
+    });
 
     if (!Array.isArray(requestedProducts) || requestedProducts.length === 0) {
       throw new Error("No products selected.");
@@ -404,11 +479,12 @@ export const createGuestOrder = async (req, res) => {
         session,
       );
       const totals = calculateOrderTotals(preparedProducts, settings);
+      const cleanPaymentMethod = validatePaymentMethod(paymentMethod, settings);
       const cleanTransactionId = await validateTransactionId(
         transactionId,
+        cleanPaymentMethod,
         session,
       );
-      const cleanPaymentMethod = validatePaymentMethod(paymentMethod);
 
       orderNumber = await generateOrderNumber(session);
 
@@ -430,11 +506,7 @@ export const createGuestOrder = async (req, res) => {
         postalCode: postalCode?.trim() || "",
         products,
         ...totals,
-        payment: {
-          method: cleanPaymentMethod,
-          transactionId: cleanTransactionId,
-          status: "Pending",
-        },
+        payment: buildPayment(cleanPaymentMethod, cleanTransactionId),
         orderStatus: "Pending",
         createdAt: now,
         updatedAt: now,

@@ -4,7 +4,9 @@ import verifyFirebaseIdToken from "../utils/verifyFirebaseIdToken.js";
 const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  sameSite: "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+  path: "/",
 };
 
 export const createJWT = async (req, res) => {

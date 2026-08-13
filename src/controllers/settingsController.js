@@ -1,4 +1,8 @@
 import { settingsCollection } from "../config/database.js";
+import {
+  validateStoreSettings,
+  withStoreDefaults,
+} from "../utils/storeSettings.js";
 
 // Get Store Settings
 
@@ -8,29 +12,13 @@ export const getSettings = async (req, res) => {
       _id: "store",
     });
 
-    if (!settings) {
-      settings = {
-        _id: "store",
-        storeName: "RedFlint",
-        supportEmail: "support@redflint.com",
-        supportPhone: "",
-        whatsappNumber: "",
-        messengerLink: "",
-        currency: "BDT",
-        shippingFee: 120,
-        freeShipping: 3000,
-        maintenanceMode: false,
-        createdAt: new Date(),
-      };
-
-      await settingsCollection.insertOne(settings);
-    }
-
-    res.send(settings);
+    res.send(withStoreDefaults(settings || {}));
   } catch (error) {
+    console.error("Get settings error:", error);
+
     res.status(500).send({
       success: false,
-      message: error.message,
+      message: "Failed to load settings.",
     });
   }
 };
@@ -38,7 +26,7 @@ export const getSettings = async (req, res) => {
 // Update Settings
 export const updateSettings = async (req, res) => {
   try {
-    const settings = req.body;
+    const settings = validateStoreSettings(req.body);
 
     await settingsCollection.updateOne(
       {
@@ -49,20 +37,29 @@ export const updateSettings = async (req, res) => {
           ...settings,
           updatedAt: new Date(),
         },
+        $setOnInsert: {
+          createdAt: new Date(),
+        },
       },
       {
         upsert: true,
       },
     );
 
+    const updatedSettings = await settingsCollection.findOne({ _id: "store" });
+
     res.send({
       success: true,
       message: "Settings updated successfully.",
+      settings: withStoreDefaults(updatedSettings || settings),
     });
   } catch (error) {
-    res.status(500).send({
+    res.status(error.name === "ValidationError" ? 400 : 500).send({
       success: false,
-      message: error.message,
+      message:
+        error.name === "ValidationError"
+          ? error.message
+          : "Failed to update settings.",
     });
   }
 };
